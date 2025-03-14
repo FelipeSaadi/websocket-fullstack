@@ -29,7 +29,7 @@ const Page = ({ params }: { params: { organizationId: string } }) => {
     <div className="p-4 max-w-2xl mx-auto">
       <div className="flex items-center mb-4">
         <span className="flex items-center gap-2">
-          <ChevronLeft className="w-6 h-6 cursor-pointer" onClick={() => router.push('/')} />
+          <ChevronLeft className="w-6 h-6 cursor-pointer" onClick={() => router.push('/websocket')} />
           <h1 className="text-2xl font-bold">WebSocket Chat - Organization {organizationId}</h1>
         </span>
       </div>

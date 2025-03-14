@@ -1,60 +1,32 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 
-import { useMessagesSocketIO } from "@/hooks/use-chats"
+const orgs = [
+  { id: 1, name: 'Org 1' },
+  { id: 2, name: 'Org 2' },
+]
 
 const Page = () => {
   const router = useRouter()
-  const { messages, sendMessage } = useMessagesSocketIO('')
-  const [message, setMessage] = useState("")
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    if (message.trim()) {
-      sendMessage(message)
-      setMessage("")
-    }
-  }
-
-  useEffect(() => {
-    console.log(messages)
-  }, [messages])
 
   return (
     <div className="p-4 max-w-2xl mx-auto">
       <div className="flex items-center mb-4">
         <span className="flex items-center gap-2">
-          <ChevronLeft className="w-6 h-6 cursor-pointer" onClick={() => router.push('/')}/>
-          <h1 className="text-2xl font-bold">Socket.IO Chat</h1>
+          <ChevronLeft className="w-6 h-6 cursor-pointer" onClick={() => router.push('/')} />
+          <h1 className="text-2xl font-bold">Socket.IO Orgs</h1>
         </span>
       </div>
 
-      <div className="flex flex-col gap-2 h-[400px] overflow-y-auto">
-        {messages?.map((msg: string, index: number) => (
-          <div key={index} className="p-2 rounded mb-2 shadow">
-            {msg}
-          </div>
+      <div className="flex flex-col gap-2 mt-8">
+        {orgs.map((org) => (
+          <span className="cursor-pointer" key={org.id} onClick={() => router.push(`/socket-io/${org.id}`)}>
+            Go to {org.name}
+          </span>
         ))}
       </div>
-
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className="flex-1 px-4 py-2 border rounded"
-          placeholder="Digite sua mensagem..."
-        />
-        <button
-          type="submit"
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-        >
-          Enviar
-        </button>
-      </form>
     </div>
   )
 }
