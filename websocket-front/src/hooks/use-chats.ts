@@ -66,11 +66,6 @@ export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
 
   const sendMessage = (message: string, sender: string) => {
     if (socket && message.trim()) {
-      const newMessage: ChatMessage = {
-        text: message,
-        timestamp: Date.now(),
-        sender
-      }
       socket.emit('chat_message', { organizationId, chatId, message, sender })
     }
   }
