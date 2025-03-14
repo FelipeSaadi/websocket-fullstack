@@ -1,9 +1,24 @@
 import WebSocket, { Server } from 'ws'
 import http from 'http'
 
-interface MessagesByOrg {
-  clients: Set<WebSocket>
-  messages: string[]
+interface ChatMessage {
+  text: string
+  timestamp: number
+  sender: string
+}
+
+interface Chat {
+  messages: ChatMessage[]
+}
+
+interface OrganizationData {
+  chats: Record<string, Chat>
+}
+
+interface Client {
+  ws: WebSocket
+  organizationId: string
+  chatId: string
 }
 
 const server = http.createServer((req, res) => {
@@ -12,57 +27,84 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'GET') {
     const [, organizationId] = req.url?.split('/') || []
+    const orgData = messagesByOrg.get(organizationId)
     res.writeHead(200)
-    res.end(JSON.stringify(messagesByOrg.get(organizationId)?.messages || []))
+    res.end(JSON.stringify({ chats: orgData?.chats || {} }))
   } else {
     res.writeHead(405)
     res.end('Method not allowed')
   }
 })
 
-const messagesByOrg = new Map<string, MessagesByOrg>()
+const messagesByOrg = new Map<string, OrganizationData>()
+const clients = new Map<WebSocket, Client>()
 
 const wss = new Server({ server })
 
 wss.on('connection', (ws) => {
   console.log('New client connected')
 
-  let currentOrg: string | null = null
-
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message.toString())
 
       if (data.type === 'join_room') {
-        const organizationId = data.organizationId
-        currentOrg = organizationId
+        const { organizationId, chatId } = data
 
-        if (!messagesByOrg.has(organizationId)) {
-          messagesByOrg.set(organizationId, {
-            clients: new Set(),
-            messages: []
-          })
+        // Remove client from previous room if exists
+        const previousClient = clients.get(ws)
+        if (previousClient) {
+          clients.delete(ws)
         }
 
-        messagesByOrg.get(organizationId)!.clients.add(ws)
-        console.log(`User joined organization: ${organizationId}`)
+        // Add client to new room
+        clients.set(ws, { ws, organizationId, chatId })
+
+        if (!messagesByOrg.has(organizationId)) {
+          messagesByOrg.set(organizationId, { chats: {} })
+        }
+
+        const orgData = messagesByOrg.get(organizationId)!
+        if (!orgData.chats[chatId]) {
+          orgData.chats[chatId] = { messages: [] }
+        }
+
+        console.log(`User joined organization: ${organizationId}, chat: ${chatId}`)
       }
 
-      if (data.type === 'chat_message' && currentOrg) {
-        const orgData = messagesByOrg.get(currentOrg)
-        if (orgData) {
-          console.log(`Message received in organization ${currentOrg}: ${data.data}`)
-          
-          orgData.messages.push(data.data)
-
-          orgData.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({
-                type: 'new_message',
-                data: data.data
-              }))
+      if (data.type === 'chat_message') {
+        const client = clients.get(ws)
+        if (client) {
+          const { organizationId, chatId } = client
+          const orgData = messagesByOrg.get(organizationId)
+          if (orgData) {
+            const newMessage: ChatMessage = {
+              text: data.data,
+              timestamp: Date.now(),
+              sender: data.sender
             }
-          })
+            
+            console.log(`Message received in organization ${organizationId}, chat ${chatId}: ${data.data}`)
+            
+            if (!orgData.chats[chatId]) {
+              orgData.chats[chatId] = { messages: [] }
+            }
+            orgData.chats[chatId].messages.push(newMessage)
+
+            // Envia a mensagem apenas para os clientes no mesmo chat
+            clients.forEach((otherClient, otherWs) => {
+              if (
+                otherClient.organizationId === organizationId &&
+                otherClient.chatId === chatId &&
+                otherWs.readyState === WebSocket.OPEN
+              ) {
+                otherWs.send(JSON.stringify({
+                  type: 'new_message',
+                  data: newMessage
+                }))
+              }
+            })
+          }
         }
       }
     } catch (error) {
@@ -71,10 +113,7 @@ wss.on('connection', (ws) => {
   })
 
   ws.on('close', () => {
-    if (currentOrg && messagesByOrg.has(currentOrg)) {
-      const orgData = messagesByOrg.get(currentOrg)!
-      orgData.clients.delete(ws)
-    }
+    clients.delete(ws)
     console.log('Client disconnected')
   })
 })

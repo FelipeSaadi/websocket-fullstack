@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
-import useSWR, { mutate } from 'swr'
+import useSWR from 'swr'
 
 const SOCKET_IO_URL = 'http://localhost:5000'
 
@@ -86,29 +86,36 @@ export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
 const WEBSOCKET_URL = 'ws://localhost:8080'
 
 const fetcherWebSocket = async (url: string) => {
-  if (!url) return []
+  if (!url) return { chats: {} }
   const response = await fetch(url)
   const data = await response.json()
-  return Array.isArray(data) ? data : []
+  return data as OrganizationData
 }
 
-export const useMessagesWebSocket = (organizationId: string) => {
-  const { data: messages, mutate: updateMessages } = useSWR<string[]>(
+export const useMessagesWebSocket = (organizationId: string, chatId: string) => {
+  const { data, mutate } = useSWR<OrganizationData>(
     organizationId ? `${WEBSOCKET_URL.replace('ws://', 'http://')}/${organizationId}` : null,
     fetcherWebSocket,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
-      fallbackData: [],
+      fallbackData: { chats: {} },
     }
   )
 
   const socketRef = useRef<WebSocket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const messageQueueRef = useRef<Set<string>>(new Set())
+  const currentChatRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!organizationId) return
+    if (!organizationId || !chatId) return
+
+    if (currentChatRef.current !== chatId && socketRef.current) {
+      socketRef.current.close()
+      socketRef.current = null
+    }
+
+    currentChatRef.current = chatId
 
     const connect = () => {
       const ws = new WebSocket(WEBSOCKET_URL)
@@ -117,21 +124,23 @@ export const useMessagesWebSocket = (organizationId: string) => {
       ws.onopen = () => {
         console.log('WebSocket connected')
         setIsConnected(true)
-        ws.send(JSON.stringify({ type: 'join_room', organizationId }))
-        updateMessages()
+        ws.send(JSON.stringify({ type: 'join_room', organizationId, chatId }))
       }
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
           if (message.type === 'new_message') {
-            if (!messageQueueRef.current.has(message.data)) {
-              updateMessages((prev: string[] = []) => [...prev, message.data], { 
-                revalidate: false,
-                populateCache: true 
-              })
-            }
-            messageQueueRef.current.delete(message.data)
+            mutate((prev: OrganizationData = { chats: {} }) => {
+              const updatedChats = { ...prev.chats }
+              if (!updatedChats[chatId]) {
+                updatedChats[chatId] = { messages: [] }
+              }
+              updatedChats[chatId] = {
+                messages: [...updatedChats[chatId].messages, message.data]
+              }
+              return { chats: updatedChats }
+            }, false)
           }
         } catch (error) {
           console.error('Error processing message:', error)
@@ -141,36 +150,42 @@ export const useMessagesWebSocket = (organizationId: string) => {
       ws.onclose = () => {
         console.log('WebSocket disconnected')
         setIsConnected(false)
-        setTimeout(() => {
-          console.log('Trying to reconnect...')
-          connect()
-        }, 3000)
+        if (currentChatRef.current === chatId) {
+          setTimeout(() => {
+            console.log('Trying to reconnect...')
+            connect()
+          }, 3000)
+        }
       }
 
       return ws
     }
 
-    const ws = connect()
+    if (!socketRef.current) {
+      const ws = connect()
 
-    return () => {
-      if (ws) {
-        ws.close()
+      return () => {
+        if (ws) {
+          ws.close()
+        }
       }
     }
-  }, [organizationId, updateMessages])
+  }, [organizationId, chatId, mutate])
 
-  const sendMessage = (message: string) => {
+  const sendMessage = (message: string, sender: string) => {
     if (socketRef.current?.readyState === WebSocket.OPEN && message.trim()) {
-      messageQueueRef.current.add(message)
       socketRef.current.send(JSON.stringify({
         type: 'chat_message',
-        data: message
+        data: message,
+        sender
       }))
     }
   }
 
+  const messages = data?.chats[chatId]?.messages || []
+
   return {
-    messages: Array.isArray(messages) ? messages : [],
+    messages,
     sendMessage,
     isConnected
   }
