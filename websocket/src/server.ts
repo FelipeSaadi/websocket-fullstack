@@ -74,9 +74,6 @@ wss.on('connection', (ws) => {
     if (currentOrg && messagesByOrg.has(currentOrg)) {
       const orgData = messagesByOrg.get(currentOrg)!
       orgData.clients.delete(ws)
-      if (orgData.clients.size === 0) {
-        messagesByOrg.delete(currentOrg)
-      }
     }
     console.log('Client disconnected')
   })

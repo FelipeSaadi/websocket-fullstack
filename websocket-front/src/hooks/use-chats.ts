@@ -66,18 +66,19 @@ const fetcherWebSocket = async (url: string) => {
 }
 
 export const useMessagesWebSocket = (organizationId: string) => {
-  const { data: messages } = useSWR<string[]>(
+  const { data: messages, mutate: updateMessages } = useSWR<string[]>(
     organizationId ? `${WEBSOCKET_URL.replace('ws://', 'http://')}/${organizationId}` : null,
     fetcherWebSocket,
     {
       revalidateOnFocus: false,
-      revalidateOnReconnect: false,
+      revalidateOnReconnect: true,
       fallbackData: [],
     }
   )
 
   const socketRef = useRef<WebSocket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const messageQueueRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!organizationId) return
@@ -87,20 +88,23 @@ export const useMessagesWebSocket = (organizationId: string) => {
       socketRef.current = ws
 
       ws.onopen = () => {
-        console.log('WebSocket conectado')
+        console.log('WebSocket connected')
         setIsConnected(true)
         ws.send(JSON.stringify({ type: 'join_room', organizationId }))
+        updateMessages()
       }
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
           if (message.type === 'new_message') {
-            mutate(
-              `${WEBSOCKET_URL.replace('ws://', 'http://')}/${organizationId}`,
-              (prev: string[] = []) => [...prev, message.data],
-              { revalidate: false }
-            )
+            if (!messageQueueRef.current.has(message.data)) {
+              updateMessages((prev: string[] = []) => [...prev, message.data], { 
+                revalidate: false,
+                populateCache: true 
+              })
+            }
+            messageQueueRef.current.delete(message.data)
           }
         } catch (error) {
           console.error('Error processing message:', error)
@@ -108,10 +112,10 @@ export const useMessagesWebSocket = (organizationId: string) => {
       }
 
       ws.onclose = () => {
-        console.log('WebSocket desconectado')
+        console.log('WebSocket disconnected')
         setIsConnected(false)
         setTimeout(() => {
-          console.log('Tentando reconectar...')
+          console.log('Trying to reconnect...')
           connect()
         }, 3000)
       }
@@ -126,10 +130,11 @@ export const useMessagesWebSocket = (organizationId: string) => {
         ws.close()
       }
     }
-  }, [organizationId])
+  }, [organizationId, updateMessages])
 
   const sendMessage = (message: string) => {
     if (socketRef.current?.readyState === WebSocket.OPEN && message.trim()) {
+      messageQueueRef.current.add(message)
       socketRef.current.send(JSON.stringify({
         type: 'chat_message',
         data: message
