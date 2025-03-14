@@ -1,0 +1,16 @@
+{
+  "name": "chat-socket",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "socket.io": "^4.8.1",
+    "tsx": "^4.19.2"
+  }
+}
