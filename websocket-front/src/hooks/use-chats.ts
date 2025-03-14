@@ -4,54 +4,81 @@ import useSWR, { mutate } from 'swr'
 
 const SOCKET_IO_URL = 'http://localhost:5000'
 
-const fetcherSocketIO = async (url: string) => {
-  if (!url) return []
-  const response = await fetch(url)
-  const data = await response.json()
-  return Array.isArray(data) ? data : []
+interface ChatMessage {
+  text: string
+  timestamp: number
+  sender: string
 }
 
-export const useMessagesSocketIO = (organizationId: string) => {
-  const { data: messages } = useSWR<string[]>(
+interface Chat {
+  messages: ChatMessage[]
+}
+
+interface OrganizationData {
+  chats: Record<string, Chat>
+}
+
+const fetcherSocketIO = async (url: string) => {
+  if (!url) return { chats: {} }
+  const response = await fetch(url)
+  const data = await response.json()
+  return data as OrganizationData
+}
+
+export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
+  const { data, mutate } = useSWR<OrganizationData>(
     organizationId ? `${SOCKET_IO_URL}/${organizationId}` : null,
     fetcherSocketIO,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      fallbackData: [],
+      fallbackData: { chats: {} },
     }
   )
 
   const [socket, setSocket] = useState<Socket | null>(null)
 
   useEffect(() => {
-    if (!organizationId) return
+    if (!organizationId || !chatId) return
 
     const newSocket = io(SOCKET_IO_URL, { transports: ['websocket'] })
     setSocket(newSocket)
 
-    newSocket.emit('join_room', organizationId)
+    newSocket.emit('join_room', { organizationId, chatId })
 
-    newSocket.on('new_message', (msg: string) => {
-      mutate(`${SOCKET_IO_URL}/${organizationId}`, (prev: string[] = []) => [...prev, msg], {
-        revalidate: false,
-        populateCache: true,
-      })
+    newSocket.on('new_message', (msg: ChatMessage) => {
+      mutate((prev: OrganizationData = { chats: {} }) => {
+        const updatedChats = { ...prev.chats }
+        if (!updatedChats[chatId]) {
+          updatedChats[chatId] = { messages: [] }
+        }
+        updatedChats[chatId] = {
+          messages: [...updatedChats[chatId].messages, msg]
+        }
+        return { chats: updatedChats }
+      }, false)
     })
 
     return () => {
       newSocket.disconnect()
     }
-  }, [organizationId])
+  }, [organizationId, chatId, mutate])
 
-  const sendMessage = (message: string) => {
+  const sendMessage = (message: string, sender: string) => {
     if (socket && message.trim()) {
-      socket.emit('chat_message', { organizationId, message })
+      const newMessage: ChatMessage = {
+        text: message,
+        timestamp: Date.now(),
+        sender
+      }
+      socket.emit('chat_message', { organizationId, chatId, message, sender })
     }
   }
 
+  const messages = data?.chats[chatId]?.messages || []
+
   return {
-    messages: Array.isArray(messages) ? messages : [],
+    messages,
     sendMessage,
   }
 }
