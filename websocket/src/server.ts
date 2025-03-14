@@ -53,10 +53,8 @@ wss.on('connection', (ws) => {
         if (orgData) {
           console.log(`Message received in organization ${currentOrg}: ${data.data}`)
           
-          // Adicionar mensagem ao histórico
           orgData.messages.push(data.data)
 
-          // Enviar para todos os clientes da organização
           orgData.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({
@@ -84,7 +82,7 @@ wss.on('connection', (ws) => {
   })
 })
 
-const PORT = process.env.PORT || 8080
+const PORT = 8080
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
