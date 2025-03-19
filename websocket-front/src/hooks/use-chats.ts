@@ -182,6 +182,7 @@ export const useMessagesWebSocket = (organizationId: string, chatId: string) => 
 
   return {
     messages,
+    mutate,
     sendMessage,
     isConnected
   }
