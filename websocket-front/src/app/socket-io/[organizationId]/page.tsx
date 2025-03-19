@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useState, use } from "react"
+import { FormEvent, useState, use, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, Plus } from "lucide-react"
 
@@ -17,7 +17,7 @@ const Page = ({ params }: { params: { organizationId: string } }) => {
   const { organizationId } = use(params)
   const [selectedChat, setSelectedChat] = useState("chat_1")
   const [userName, setUserName] = useState("Usuário")
-  const { messages, sendMessage } = useMessagesSocketIO(organizationId, selectedChat)
+  const { messages, mutate, sendMessage } = useMessagesSocketIO(organizationId, selectedChat)
   const [message, setMessage] = useState("")
   const [availableChats, setAvailableChats] = useState(["chat_1"])
 
@@ -41,6 +41,12 @@ const Page = ({ params }: { params: { organizationId: string } }) => {
       minute: '2-digit'
     }).format(timestamp)
   }
+
+  useEffect(() => {
+    if (selectedChat) {
+      mutate()
+    }
+  }, [selectedChat])
 
   return (
     <div className="p-4 max-w-4xl mx-auto">

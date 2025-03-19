@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "python-socket-io"
+version = "0.1.0"
+description = ""
+authors = ["Felipe Saadi <felipesaadisiegert@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.11"
+uvicorn = "^0.34.0"
+python-socketio = "^5.12.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

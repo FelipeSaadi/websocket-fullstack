@@ -74,6 +74,7 @@ export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
 
   return {
     messages,
+    mutate,
     sendMessage,
   }
 }
