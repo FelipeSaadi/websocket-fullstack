@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { io, Socket } from 'socket.io-client'
 import useSWR from 'swr'
+import { io, Socket } from 'socket.io-client'
+import logger from '@/logger/logger'
 
 const SOCKET_IO_URL = 'http://localhost:5000'
 
@@ -118,7 +119,7 @@ export const useMessagesWebSocket = (organizationId: string, chatId: string) => 
       socketRef.current = ws
 
       ws.onopen = () => {
-        console.log('WebSocket connected')
+        logger.info('WebSocket connected', organizationId, chatId)
         setIsConnected(true)
         ws.send(JSON.stringify({ type: 'join_room', organizationId, chatId }))
       }
@@ -139,16 +140,16 @@ export const useMessagesWebSocket = (organizationId: string, chatId: string) => 
             }, false)
           }
         } catch (error) {
-          console.error('Error processing message:', error)
+          logger.error('Error processing message:', error)
         }
       }
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected')
+        logger.info('WebSocket disconnected', organizationId, chatId)
         setIsConnected(false)
         if (currentChatRef.current === chatId) {
           setTimeout(() => {
-            console.log('Trying to reconnect...')
+            logger.info('Trying to reconnect', organizationId, chatId)
             connect()
           }, 3000)
         }
