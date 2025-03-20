@@ -10,6 +10,8 @@ python = "^3.12"
 fastapi = "^0.115.11"
 uvicorn = "^0.34.0"
 python-socketio = "^5.12.1"
+fastapi-socketio = "^0.0.10"
+pyjwt = "^2.10.1"
 
 
 [build-system]

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
+import { useEffect } from "react"
 
 const orgs = [
   { id: 1, name: 'Org 1' },
@@ -10,6 +11,22 @@ const orgs = [
 
 const Page = () => {
   const router = useRouter()
+
+  useEffect(() => {
+    const login = async () => {
+      const response = await fetch('http://localhost:5000/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: 'john_doe', password: '123456' }),
+      })
+      const data = await response.json()
+      localStorage.setItem('token', data.access_token)
+    }
+
+    login()
+  }, [])
 
   return (
     <div className="p-4 max-w-2xl mx-auto">

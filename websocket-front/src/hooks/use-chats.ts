@@ -21,9 +21,30 @@ interface OrganizationData {
 
 const fetcherSocketIO = async (url: string) => {
   if (!url) return { chats: {} }
-  const response = await fetch(url)
-  const data = await response.json()
-  return data as OrganizationData
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      logger.warn('No authentication token found')
+      return { chats: {} }
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!response.ok) {
+      logger.error(`Error fetching data: ${response.status} ${response.statusText}`)
+      return { chats: {} }
+    }
+
+    const data = await response.json()
+    return data || { chats: {} }
+  } catch (error) {
+    logger.error('Error fetching data:', error)
+    return { chats: {} }
+  }
 }
 
 export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
@@ -42,7 +63,14 @@ export const useMessagesSocketIO = (organizationId: string, chatId: string) => {
   useEffect(() => {
     if (!organizationId || !chatId) return
 
-    const newSocket = io(SOCKET_IO_URL, { transports: ['websocket'] })
+    const token = localStorage.getItem('token')
+
+    const newSocket = io(SOCKET_IO_URL, {
+      transports: ['websocket'],
+      auth: {
+        token: `Bearer ${token}`
+      }
+    })
     setSocket(newSocket)
 
     newSocket.emit('join_room', { organizationId, chatId })
