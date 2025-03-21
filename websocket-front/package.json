@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@sentry/nextjs": "^9.6.1",
+    "@sentry/nextjs": "^9.8.0",
     "lucide-react": "^0.480.0",
     "next": "15.2.2",
     "pino": "^9.6.0",

@@ -34,10 +34,12 @@ const fetcherSocketIO = async (url: string) => {
       }
     })
 
-    if (response.ok) {
+    if (!response.ok) {
       logger.error({
+        error: 'Failed to fetch chats',
         status: response.status,
-        statusText: response.statusText
+        statusText: response.statusText,
+        url
       })
       return { chats: {} }
     }
@@ -45,7 +47,10 @@ const fetcherSocketIO = async (url: string) => {
     const data = await response.json()
     return data || { chats: {} }
   } catch (error) {
-    logger.error('Failed to fetch chats', { error: error instanceof Error ? error.message : String(error) })
+    logger.error({
+      error: 'Unexpected error while fetching chats',
+      details: error instanceof Error ? error.message : String(error)
+    })
     return { chats: {} }
   }
 }

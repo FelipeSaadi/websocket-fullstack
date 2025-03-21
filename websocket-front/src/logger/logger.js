@@ -6,7 +6,7 @@ const isServer = typeof window === 'undefined'
 
 if (!isDevelopment) {
   Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || "https://your-sentry-dsn-here@o0.ingest.sentry.io/0",
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
     tracesSampleRate: 1.0,
     environment: process.env.NODE_ENV,
   });
@@ -59,54 +59,83 @@ const serializers = {
 }
 
 const formatters = {
+  formatLevel: (level) => level.toUpperCase(),
+  
   formatDate: (date, format = 'ISO') => {
     const d = date instanceof Date ? date : new Date(date)
     switch (format) {
-      case 'ISO': return d.toISOString()
       case 'TIME': return d.toLocaleTimeString()
       case 'FULL': return d.toLocaleString()
       default: return d.toISOString()
     }
   },
-  formatLevel: (level) => level.toUpperCase(),
-  formatLogMessage: (time, level, ...args) => {
+
+  /**
+   * Formats console message with colors (development only)
+   */
+  formatConsole: (level, message, bindings = {}) => {
     const colors = {
       trace: '#6c757d',
       debug: '#0dcaf0',
       info: '#0d6efd',
       warn: '#ffc107',
       error: '#dc3545',
-      fatal: '#7f1d1d'
+      fatal: '#dc3545'
+    }
+
+    const time = formatters.formatDate(new Date(), 'TIME')
+    let text = ''
+
+    if (typeof message === 'object' && message !== null) {
+      const { error, ...details } = message
+      text = error || ''
+      if (Object.keys(details).length) {
+        text += ` (${Object.entries(details)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ')})`
+      }
+    } else {
+      text = String(message)
     }
     
     console.log(
-      `%c[${formatters.formatDate(time, 'TIME')}] %c${level}%c:`,
+      `%c[${time}] %c${formatters.formatLevel(level)}%c: ${text}`,
       'color: gray; font-weight: bold',
       `color: ${colors[level.toLowerCase()] || 'inherit'}; font-weight: bold`,
       'color: inherit',
-      ...args
+      bindings
     )
-  },
-  getContext: () => ({ env: process.env.NODE_ENV, context: isServer ? 'server' : 'browser' })
+  }
 }
 
-/**
- * Handlers for Sentry integration in production
- * Manages sending critical logs for monitoring
- */
 const sentryHandlers = {
   /**
-   * Sends log to Sentry based on type
-   * @param {string} level - Log level (error/fatal/warn)
-   * @param {string|Error} message - Log message or Error object
-   * @param {Object} extra - Additional context
+   * Sends structured error data to Sentry
    */
-  sendToSentry: (level, message, extra = {}) => {
+  sendToSentry: (level, message, bindings = {}) => {
     if (!isDevelopment) {
+      const data = {
+        level,
+        extra: {
+          ...bindings,
+          timestamp: new Date().toISOString()
+        },
+        tags: {
+          environment: process.env.NODE_ENV,
+          context: isServer ? 'server' : 'browser'
+        }
+      }
+
       if (message instanceof Error) {
-        Sentry.captureException(message, { level, extra })
+        Sentry.captureException(message, data)
+      } else if (typeof message === 'object' && message !== null) {
+        const { error, ...context } = message
+        Sentry.captureMessage(error || 'An error occurred', {
+          ...data,
+          extra: { ...data.extra, ...context }
+        })
       } else {
-        Sentry.captureMessage(message, { level, extra })
+        Sentry.captureMessage(String(message), data)
       }
     }
   }
@@ -115,40 +144,27 @@ const sentryHandlers = {
 const devConfig = {
   browser: {
     asObject: true,
-    write: {
-      level: (level) => ({
-        level: formatters.formatLevel(level),
-        time: formatters.formatDate(new Date())
-      }),
-      transmit: (logEvent) => {
-        const { time, level: levelLabel, ...rest } = logEvent
-        formatters.formatLogMessage(time, levelLabel, ...Object.values(rest))
+    transmit: {
+      send: (level, logEvent) => {
+        const { messages = [], bindings = {} } = logEvent
+        formatters.formatConsole(level, messages[0], bindings)
       }
-    },
-    formatters: {
-      level: (label) => ({ level: formatters.formatLevel(label) }),
-      bindings: () => formatters.getContext(),
-      log: (object) => ({ ...object, timestamp: formatters.formatDate(new Date(), 'FULL') })
     }
   },
   level: 'trace',
-  serializers,
-  base: { pid: undefined, hostname: undefined }
+  serializers
 }
 
 const prodConfig = {
   browser: {
     asObject: true,
-    formatters: {
-      level: (label) => ({ level: formatters.formatLevel(label) })
-    },
     transmit: {
       level: 'warn',
       send: (level, logEvent) => {
         const { messages = [], bindings = {} } = logEvent
-        const message = messages.join(' ')
+        const message = messages[0]
         
-        console[level](`[${formatters.formatLevel(level)}] ${message}`)
+        console[level](`[${formatters.formatLevel(level)}] ${typeof message === 'object' ? JSON.stringify(message) : message}`)
         
         if (['warn', 'error', 'fatal'].includes(level)) {
           sentryHandlers.sendToSentry(level, message, bindings)
@@ -157,23 +173,7 @@ const prodConfig = {
     }
   },
   level: 'warn',
-  hooks: {
-    logMethod(inputArgs, method) {
-      if (!isDevelopment && isServer) {
-        const level = this.level
-        const [msg, ...args] = inputArgs
-        
-        if (['warn', 'error', 'fatal'].includes(level)) {
-          sentryHandlers.sendToSentry(level, msg, { args })
-        }
-      }
-      return method.apply(this, inputArgs)
-    }
-  },
-  serializers,
-  base: null,
-  timestamp: false,
-  redact: ['password', 'secret', 'token', 'authorization', 'cookie']
+  serializers
 }
 
 const baseLogger = pino(isDevelopment ? devConfig : prodConfig)
