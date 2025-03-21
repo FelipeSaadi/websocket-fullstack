@@ -24,7 +24,7 @@ const fetcherSocketIO = async (url: string) => {
   try {
     const token = localStorage.getItem('token')
     if (!token) {
-      logger.warn('No authentication token found')
+      logger.warn('No authentication token found while fetching chats')
       return { chats: {} }
     }
 
@@ -34,15 +34,18 @@ const fetcherSocketIO = async (url: string) => {
       }
     })
 
-    if (!response.ok) {
-      logger.error(`Error fetching data: ${response.status} ${response.statusText}`)
+    if (response.ok) {
+      logger.error({
+        status: response.status,
+        statusText: response.statusText
+      })
       return { chats: {} }
     }
 
     const data = await response.json()
     return data || { chats: {} }
   } catch (error) {
-    logger.error('Error fetching data:', error)
+    logger.error('Failed to fetch chats', { error: error instanceof Error ? error.message : String(error) })
     return { chats: {} }
   }
 }
