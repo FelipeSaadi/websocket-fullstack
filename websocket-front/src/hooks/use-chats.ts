@@ -34,23 +34,16 @@ const fetcherSocketIO = async (url: string) => {
       }
     })
 
-    if (!response.ok) {
-      logger.error({
-        error: 'Failed to fetch chats',
-        status: response.status,
-        statusText: response.statusText,
-        url
-      })
-      return { chats: {} }
+    if (response.ok) {
+      return response.json()
     }
 
-    const data = await response.json()
-    return data || { chats: {} }
+    const error = new Error('Failed to fetch chats');
+    logger.error({ err: {error: error, displayStack: true}, res: response }, 'Failed to fetch chats');
+    return { chats: {} }
   } catch (error) {
-    logger.error({
-      error: 'Unexpected error while fetching chats',
-      details: error instanceof Error ? error.message : String(error)
-    })
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error({ err: {error: err, displayStack: true} }, 'Unexpected error while fetching chats');
     return { chats: {} }
   }
 }

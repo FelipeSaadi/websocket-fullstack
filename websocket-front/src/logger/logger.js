@@ -23,12 +23,14 @@ const serializers = {
    * @returns {Object} Formatted error (stack trace only in development)
    */
   err: (err) => {
+    const { error, displayStack = isDevelopment } = err
+
     return {
-      type: err.constructor.name,
-      message: err.message,
-      stack: isDevelopment ? err.stack : undefined,
-      code: err.code,
-      statusCode: err.statusCode
+      type: error.constructor.name,
+      message: error.message,
+      stack: displayStack ? error.stack : undefined,
+      code: error.code,
+      statusCode: error.statusCode
     }
   },
   
@@ -41,7 +43,7 @@ const serializers = {
     return {
       method: req.method,
       url: req.url,
-      headers: isDevelopment ? req.headers : undefined,
+      headers: req.headers,
       remoteAddress: req.remoteAddress
     }
   },
@@ -86,24 +88,30 @@ const formatters = {
     const time = formatters.formatDate(new Date(), 'TIME')
     let text = ''
 
-    if (typeof message === 'object' && message !== null) {
-      const { error, ...details } = message
-      text = error || ''
-      if (Object.keys(details).length) {
-        text += ` (${Object.entries(details)
-          .map(([k, v]) => `${k}=${v}`)
-          .join(' ')})`
+    const processedBindings = Object.entries(bindings).reduce((acc, [key, value]) => {
+      if (serializers[key]) {
+        acc[key] = serializers[key](value)
+      } else {
+        acc[key] = value
       }
+      return acc
+    }, {})
+
+    if (typeof message === 'object' && message !== null) {
+      text = JSON.stringify(message)
     } else {
       text = String(message)
+    }
+
+    if (Object.keys(processedBindings).length > 0) {
+      text += ` ${JSON.stringify(processedBindings)}`
     }
     
     console.log(
       `%c[${time}] %c${formatters.formatLevel(level)}%c: ${text}`,
       'color: gray; font-weight: bold',
       `color: ${colors[level.toLowerCase()] || 'inherit'}; font-weight: bold`,
-      'color: inherit',
-      bindings
+      'color: inherit'
     )
   }
 }
@@ -164,10 +172,24 @@ const prodConfig = {
         const { messages = [], bindings = {} } = logEvent
         const message = messages[0]
         
-        console[level](`[${formatters.formatLevel(level)}] ${typeof message === 'object' ? JSON.stringify(message) : message}`)
+        const processedBindings = Object.entries(bindings).reduce((acc, [key, value]) => {
+          if (serializers[key]) {
+            acc[key] = serializers[key](value)
+          } else {
+            acc[key] = value
+          }
+          return acc
+        }, {})
+
+        let logMessage = typeof message === 'object' ? JSON.stringify(message) : message
+        if (Object.keys(processedBindings).length > 0) {
+          logMessage += ` ${JSON.stringify(processedBindings)}`
+        }
+
+        console[level](`[${level.toUpperCase()}] ${logMessage}`)
         
         if (['warn', 'error', 'fatal'].includes(level)) {
-          sentryHandlers.sendToSentry(level, message, bindings)
+          sentryHandlers.sendToSentry(level, message, processedBindings)
         }
       }
     }
